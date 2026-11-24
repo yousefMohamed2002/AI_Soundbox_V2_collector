@@ -563,9 +563,12 @@
         <button id="btn-skip" class="btn btn-outline">تخطي ⏭️</button>
       </div>
 
-      <div style="margin-top: 10px;">
-        <button id="btn-finish-early" class="btn btn-secondary" style="font-size: 0.95rem; padding: 12px;">
+      <div style="margin-top: 10px; display: flex; gap: 10px;">
+        <button id="btn-finish-early" class="btn btn-secondary" style="flex: 1; font-size: 0.95rem; padding: 12px;">
           إنهاء الجلسة ورفع الملفات الآن
+        </button>
+        <button id="btn-reset-session" class="btn btn-danger" style="flex: 1; font-size: 0.95rem; padding: 12px;" title="حذف الجلسة القديمة والبدء من جديد">
+          🗑️ بدء من جديد (50 جملة)
         </button>
       </div>
     </section>
@@ -1924,6 +1927,14 @@
       }
       await dbClearAll();
       window.location.reload();
+    });
+
+    // Reset session from recording screen button
+    document.getElementById("btn-reset-session").addEventListener("click", async () => {
+      if (confirm("هل تريد حقاً حذف الجلسة الحالية والبدء من جديد بالـ 50 جملة الجديدة؟")) {
+        await dbClearAll();
+        window.location.reload();
+      }
     });
 
     /*************************************************************************
