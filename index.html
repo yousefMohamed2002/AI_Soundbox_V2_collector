@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>جمع بيانات صوتية - تدريب النموذج الصوتي</title>
+
+  <!-- External Dependencies (Only supabase-js v2 and JSZip from CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --primary: #1d4ed8;
+      --primary-hover: #1e40af;
+      --success: #15803d;
+      --success-bg: #dcfce7;
+      --warning: #b45309;
+      --warning-bg: #fef3c7;
+      --danger: #b91c1c;
+      --danger-bg: #fee2e2;
+      --text: #111827;
+      --muted: #4b5563;
+      --border: #d1d5db;
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* Top Sticky Status Bar */
+    .status-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #111827;
+      color: #ffffff;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .status-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .pill.online { background: #14532d; color: #bbf7d0; }
+    .pill.pending { background: #78350f; color: #fde68a; }
+    .pill.offline { background: #7f1d1d; color: #fecaca; }
+
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+      margin-bottom: 16px;
+    }
+
+    h1, h2, h3 {
+      margin-top: 0;
+      color: var(--text);
+    }
+
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    h2 { font-size: 1.3rem; margin-bottom: 12px; }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 18px;
+    }
+
+    /* Form Controls */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 700;
+      font-size: 1.05rem;
+      margin-bottom: 8px;
+    }
+
+    .speaker-badge {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #1e3a8a;
+      font-family: monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 10px;
+      direction: ltr;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .option-grid.cols-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .radio-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px 10px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .radio-btn.selected {
+      border-color: var(--primary);
+      background: #eff6ff;
+      color: var(--primary);
+    }
+
+    .consent-box {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #f8fafc;
+      border: 2px solid var(--border);
+      padding: 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    .consent-box input[type="checkbox"] {
+      width: 24px;
+      height: 24px;
+      margin-top: 2px;
+      accent-color: var(--primary);
+      flex-shrink: 0;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform 0.1s ease, background-color 0.15s ease, opacity 0.15s ease;
+      text-align: center;
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-warning { background: #d97706; color: #fff; }
+    .btn-secondary { background: #e5e7eb; color: #1f2937; }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .btn-row > .btn {
+      flex: 1;
+    }
+
+    /* Alert / Notice Boxes */
+    .alert {
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 14px;
+    }
+
+    .alert-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid #fcd34d; }
+    .alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #fca5a5; }
+    .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #86efac; }
+    .alert-info { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
+
+    /* Recording Prompt Card */
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 10px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+
+    .phrase-box {
+      background: #f8fafc;
+      border: 2px solid #cbd5e1;
+      border-radius: 16px;
+      padding: 32px 16px;
+      text-align: center;
+      margin-bottom: 18px;
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .phrase-tag {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--primary);
+      background: #dbeafe;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+
+    .phrase-text {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.35;
+    }
+
+    .phrase-hint {
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    /* Audio Level Meter */
+    .meter-wrapper {
+      margin: 14px 0;
+    }
+
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .meter-track {
+      width: 100%;
+      height: 14px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22c55e 0%, #eab308 75%, #ef4444 95%);
+      transition: width 0.06s linear;
+    }
+
+    /* Record Button Pulse */
+    .rec-btn-active {
+      background: #dc2626 !important;
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+      70% { box-shadow: 0 0 0 14px rgba(220, 38, 38, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    }
+
+    .hidden { display: none !important; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+      text-align: center;
+    }
+
+    .summary-item {
+      background: #f8fafc;
+      padding: 12px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .summary-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .summary-lbl {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .noise-list {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .noise-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    @media (max-width: 420px) {
+      .phrase-text { font-size: 1.85rem; }
+      .option-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Sticky Status Bar -->
+  <header class="status-bar">
+    <div>🎙️ جامع الصوت المصري</div>
+    <div class="status-pills">
+      <span id="status-uploaded" class="pill online">تم الرفع ✓ 0</span>
+      <span id="status-pending" class="pill pending">في الانتظار ⏳ 0</span>
+      <span id="status-network" class="pill offline hidden">لا يوجد اتصال ⚠️</span>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Config Warning if placeholders are untouched -->
+    <div id="config-warning" class="alert alert-danger hidden">
+      ⚠️ تنبيه للمطور: يرجى وضع <code>SUPABASE_URL</code> و <code>SUPABASE_ANON_KEY</code> في أعلى الكود قبل النشر.
+    </div>
+
+    <!-- Resume Session Banner -->
+    <div id="resume-banner" class="card hidden">
+      <h2>🔄 استكمال جلسة سابقة</h2>
+      <p id="resume-text" class="subtitle"></p>
+      <div class="btn-row">
+        <button id="btn-resume-yes" class="btn btn-primary">استكمال الجلسة</button>
+        <button id="btn-resume-no" class="btn btn-secondary">بدء متحدث جديد</button>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- SCREEN 1: SPEAKER INFORMATION                             -->
+    <!-- ========================================================= -->
+    <section id="screen-speaker" class="card">
+      <h1>بيانات المتحدث</h1>
+      <p class="subtitle">تساعدنا هذه البيانات في تحسين دقة النموذج لمختلف اللهجات والأجهزة.</p>
+
+      <div class="form-group">
+        <span class="form-label">رقم المتحدث (تلقائي):</span>
+        <span id="display-speaker-id" class="speaker-badge">spk_------</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">النوع *</label>
+        <div class="option-grid" data-field="gender">
+          <div class="radio-btn" data-value="ذكر">ذكر</div>
+          <div class="radio-btn" data-value="أنثى">أنثى</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">الفئة العمرية *</label>
+        <div class="option-grid" data-field="age_range">
+          <div class="radio-btn" data-value="أقل من 20">أقل من 20</div>
+          <div class="radio-btn" data-value="20-35">20-35</div>
+          <div class="radio-btn" data-value="36-50">36-50</div>
+          <div class="radio-btn" data-value="أكبر من 50">أكبر من 50</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">المنطقة / اللهجة *</label>
+        <div class="option-grid cols-3" data-field="region">
+          <div class="radio-btn" data-value="القاهرة">القاهرة</div>
+          <div class="radio-btn" data-value="الإسكندرية">الإسكندرية</div>
+          <div class="radio-btn" data-value="الدلتا">الدلتا</div>
+          <div class="radio-btn" data-value="الصعيد">الصعيد</div>
+          <div class="radio-btn" data-value="القناة">القناة</div>
+          <div class="radio-btn" data-value="أخرى">أخرى</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">جهاز التسجيل *</label>
+        <div class="option-grid" data-field="device">
+          <div class="radio-btn" data-value="موبايل أندرويد">موبايل أندرويد</div>
+          <div class="radio-btn" data-value="آيفون">آيفون</div>
+          <div class="radio-btn" data-value="لابتوب">لابتوب</div>
+          <div class="radio-btn" data-value="أخرى">أخرى</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="consent-box">
+          <input type="checkbox" id="chk-consent" />
+          <span>أوافق على استخدام تسجيلاتي لتدريب نموذج صوتي</span>
+        </label>
+      </div>
+
+      <div id="mic-error-box" class="alert alert-danger hidden"></div>
+
+      <button id="btn-start-session" class="btn btn-primary" disabled>
+        ابدأ التسجيل 🎙️
+      </button>
+
+      <div style="margin-top: 12px;">
+        <button id="btn-open-noise" class="btn btn-outline" disabled>
+          تسجيل ضوضاء المحل 🏪 (اختياري)
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- SCREEN 2: RECORDING SESSION                               -->
+    <!-- ========================================================= -->
+    <section id="screen-recording" class="card hidden">
+      <div class="progress-header">
+        <span id="rec-progress-text">1 / 73</span>
+        <span id="rec-duration-badge">المدة: 2 ثانية</span>
+      </div>
+
+      <div class="progress-bar-bg">
+        <div id="rec-progress-bar" class="progress-bar-fill"></div>
+      </div>
+
+      <div class="phrase-box">
+        <div id="phrase-category" class="phrase-tag">أمر صوتي</div>
+        <div id="phrase-text" class="phrase-text">إجمالي النهارده</div>
+        <div id="phrase-hint" class="phrase-hint">اضغط "تسجيل"، انتظر الصافرة، ثم انطق الجملة بوضوح</div>
+      </div>
+
+      <!-- Live Microphone Level Meter -->
+      <div class="meter-wrapper">
+        <div class="meter-label">
+          <span>مستوى الميكروفون</span>
+          <span id="meter-status-text">جاهز</span>
+        </div>
+        <div class="meter-track">
+          <div id="meter-fill" class="meter-fill"></div>
+        </div>
+      </div>
+
+      <!-- Quality Warning / Feedback -->
+      <div id="quality-alert" class="alert hidden"></div>
+
+      <!-- Recording State Controls -->
+      <div id="controls-idle">
+        <button id="btn-record" class="btn btn-primary">
+          🎙️ تسجيل
+        </button>
+      </div>
+
+      <div id="controls-recording" class="hidden">
+        <button id="btn-recording-indicator" class="btn rec-btn-active" disabled>
+          🔴 جاري التسجيل... (<span id="rec-countdown">2.0</span> ث)
+        </button>
+      </div>
+
+      <div id="controls-review" class="hidden">
+        <div class="btn-row">
+          <button id="btn-accept" class="btn btn-success">تمام، التالي ✓</button>
+          <button id="btn-rerecord" class="btn btn-warning">أعد التسجيل 🔄</button>
+        </div>
+        <div style="margin-top: 10px;">
+          <button id="btn-replay" class="btn btn-secondary">🔊 استماع للتسجيل مرة أخرى</button>
+        </div>
+      </div>
+
+      <!-- Navigation Controls -->
+      <div class="btn-row" style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
+        <button id="btn-prev" class="btn btn-outline">⬅️ رجوع</button>
+        <button id="btn-skip" class="btn btn-outline">تخطي ⏭️</button>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <button id="btn-finish-early" class="btn btn-secondary" style="font-size: 0.95rem; padding: 12px;">
+          إنهاء الجلسة ورفع الملفات الآن
+        </button>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- SCREEN 3: OPTIONAL BACKGROUND NOISE                       -->
+    <!-- ========================================================= -->
+    <section id="screen-noise" class="card hidden">
+      <h2>🏪 تسجيل ضوضاء المحل</h2>
+      <p class="subtitle">
+        يساعد تسجيل 60 ثانية من صوت الخلفية الطبيعي في المحل (بدون التحدث للميكروفون) على جعل النموذج أكثر دقة في البيئات المزدحمة.
+      </p>
+
+      <div class="meter-wrapper">
+        <div class="meter-label">
+          <span>مستوى الصوت المحيط</span>
+          <span id="noise-timer-text">60 ثانية</span>
+        </div>
+        <div class="meter-track">
+          <div id="noise-meter-fill" class="meter-fill"></div>
+        </div>
+      </div>
+
+      <div id="noise-alert" class="alert hidden"></div>
+
+      <div id="noise-controls-idle">
+        <button id="btn-record-noise" class="btn btn-primary">
+          🎙️ بدء تسجيل 60 ثانية ضوضاء
+        </button>
+      </div>
+
+      <div id="noise-controls-recording" class="hidden">
+        <button class="btn rec-btn-active" disabled>
+          🔴 جاري تسجيل الضوضاء... (<span id="noise-countdown">60</span> ث)
+        </button>
+      </div>
+
+      <div id="noise-controls-review" class="hidden">
+        <div class="btn-row">
+          <button id="btn-accept-noise" class="btn btn-success">حفظ ورفع المقطع ✓</button>
+          <button id="btn-discard-noise" class="btn btn-danger">حذف وإعادة</button>
+        </div>
+      </div>
+
+      <div id="noise-recorded-list" class="noise-list"></div>
+
+      <div class="btn-row" style="margin-top: 20px;">
+        <button id="btn-noise-to-session" class="btn btn-primary">الانتقال لتسجيل الأوامر 🎙️</button>
+        <button id="btn-noise-finish" class="btn btn-secondary">إنهاء ورفع</button>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- SCREEN 4: FINISH & BACKUP                                 -->
+    <!-- ========================================================= -->
+    <section id="screen-finish" class="card hidden">
+      <div id="finish-uploading-box">
+        <h2>⏳ جاري إكمال الرفع...</h2>
+        <p id="finish-upload-progress" class="alert alert-info">جاري رفع الملفات المتبقية...</p>
+      </div>
+
+      <div id="finish-done-box" class="hidden">
+        <div class="alert alert-success" style="font-size: 1.2rem; text-align: center;">
+          تم رفع تسجيلاتك بنجاح ✓ شكرًا ليك!
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div id="sum-recorded" class="summary-val">0</div>
+            <div class="summary-lbl">تسجيلات مقبولة</div>
+          </div>
+          <div class="summary-item">
+            <div id="sum-skipped" class="summary-val">0</div>
+            <div class="summary-lbl">تم تخطيها</div>
+          </div>
+          <div class="summary-item">
+            <div id="sum-duration" class="summary-val">0 ث</div>
+            <div class="summary-lbl">إجمالي المدة</div>
+          </div>
+        </div>
+
+        <button id="btn-download-zip" class="btn btn-primary" style="margin-bottom: 12px;">
+          📦 تحميل نسخة احتياطية (ZIP)
+        </button>
+
+        <button id="btn-new-speaker" class="btn btn-outline">
+          👤 بدء متحدث جديد (مسح البيانات المحلية)
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /*************************************************************************
+     * 0. SUPABASE CONFIGURATION (Fill in your project URL and Anon Key)
+     *************************************************************************/
+    const SUPABASE_URL = "https://zgjqtmmjhycqwvaecxvy.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnanF0bW1qaHljcXd2YWVjeHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTc0MTAsImV4cCI6MjExMTA5MzQxMH0.hphdp8Mm5yurd8tqsENz2jWkIJMjnLBlskjutBJAoBM";
+    const STORAGE_BUCKET = "kws-recordings";
+
+    // Initialize Supabase client (anon key only)
+    const isSupabaseConfigured =
+      SUPABASE_URL !== "https://YOUR-PROJECT.supabase.co" &&
+      SUPABASE_ANON_KEY !== "YOUR-ANON-PUBLIC-KEY";
+
+    const supabaseClient = isSupabaseConfigured
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+
+    if (!isSupabaseConfigured) {
+      document.getElementById("config-warning").classList.remove("hidden");
+    }
+
+    /*************************************************************************
+     * 1. DATASET DEFINITIONS (Commands, Unknowns, Silence)
+     *************************************************************************/
+    const COMMANDS_LIST = [
+      { id: "c01", text: "إجمالي النهارده" },
+      { id: "c02", text: "عدد العمليات" },
+      { id: "c03", text: "آخر عملية" },
+      { id: "c04", text: "عيد تاني" },
+      { id: "c05", text: "عمليات فشلت" },
+      { id: "c06", text: "عمليات معلقة" },
+      { id: "c07", text: "أعلى عملية" },
+      { id: "c08", text: "إجمالي امبارح" },
+      { id: "c09", text: "إجمالي الأسبوع" },
+      { id: "c10", text: "إجمالي الشهر" },
+      { id: "c11", text: "الفلوس هتنزل امتى" },
+      { id: "c12", text: "رصيد حسابي" },
+      { id: "c13", text: "فاضل للتارجيت" },
+      { id: "c14", text: "مرتجع النهارده" },
+      { id: "c15", text: "الشبكة" },
+      { id: "c16", text: "البطارية" },
+      { id: "c17", text: "علّي الصوت" },
+      { id: "c18", text: "وطّي الصوت" },
+      { id: "c19", text: "أيوه" },
+      { id: "c20", text: "لأ" } // take 2 uses "كنسل"
+    ];
+
+    const UNKNOWN_SENTENCES = [
+      "وصلني 500 جنيه؟",
+      "قارن النهارده بامبارح",
+      "إجمالي آخر عشر أيام كام؟",
+      "أزوّد مبيعاتي إزاي؟",
+      "أقدر آخد قرض؟",
+      "وريني آخر 5 عمليات",
+      "الشهر اللي فات جالي كام؟",
+      "رقم العملية كام؟",
+      "الدفع كان بأنهي طريقة؟",
+      "ملخص الأسبوع ده",
+      "جالي كام في آخر ساعتين؟",
+      "إمتى كان أكتر وقت فيه زحمة؟",
+      "القسط الجاي إمتى؟",
+      "ليه الـQR مش شغال؟",
+      "الجو عامل إيه النهارده؟",
+      "الساعة كام دلوقتي؟",
+      "جالي كام يوم الاتنين؟",
+      "وريني تقرير امبارح",
+      "رقم المرتجع إيه؟",
+      "متوقع أبيع بكام الشهر ده؟"
+    ];
+
+    /*************************************************************************
+     * 2. INDEXEDDB PERSISTENT STORAGE (Session + Queue + WAV Blobs)
+     *************************************************************************/
+    const DB_NAME = "kws_egyptian_collector_db";
+    const DB_VERSION = 1;
+    let dbInstance = null;
+
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        if (dbInstance) return resolve(dbInstance);
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("session")) {
+            db.createObjectStore("session", { keyPath: "key" });
+          }
+          if (!db.objectStoreNames.contains("clips")) {
+            // Stores accepted WAV blobs & metadata
+            db.createObjectStore("clips", { keyPath: "file" });
+          }
+          if (!db.objectStoreNames.contains("queue")) {
+            // Persistent upload queue (speaker row + audio clips)
+            db.createObjectStore("queue", { keyPath: "id" });
+          }
+        };
+        req.onsuccess = (e) => {
+          dbInstance = e.target.result;
+          resolve(dbInstance);
+        };
+        req.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function dbPut(storeName, value) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(value);
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function dbGet(storeName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readonly");
+        const req = tx.objectStore(storeName).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function dbGetAll(storeName) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readonly");
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function dbDelete(storeName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function dbClearAll() {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(["session", "clips", "queue"], "readwrite");
+        tx.objectStore("session").clear();
+        tx.objectStore("clips").clear();
+        tx.objectStore("queue").clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    /*************************************************************************
+     * 3. APPLICATION STATE
+     *************************************************************************/
+    let state = {
+      speaker: {
+        speaker_id: generateSpeakerId(),
+        gender: "",
+        age_range: "",
+        region: "",
+        device: "",
+        consent: false,
+        user_agent: navigator.userAgent
+      },
+      items: [],          // 73 prompts (60 commands + 10 unk + 3 sil)
+      currentIndex: 0,
+      skippedIndices: [], // Track skipped prompt indices
+      noiseCount: 0,
+      csvUploaded: false
+    };
+
+    // Temporary review state for current recording before pressing "تمام، التالي"
+    let pendingClip = null;
+    let pendingNoiseClip = null;
+
+    // Audio Capture Globals
+    let mediaStream = null;
+    let audioCtx = null;
+    let sourceNode = null;
+    let processorNode = null;
+    let isCapturing = false;
+    let capturedBuffers = [];
+    let captureTargetSamples = 0;
+    let captureCollectedSamples = 0;
+    let captureResolve = null;
+    let currentPlaybackAudio = null;
+
+    // Background Uploader State
+    let isUploading = false;
+    let retryAttempt = 0;
+    let retryTimer = null;
+    const BACKOFF_DELAYS = [2000, 5000, 15000, 30000, 60000];
+
+    /*************************************************************************
+     * 4. HELPER UTILITIES (IDs, Prompt Shuffling, WAV Encoding)
+     *************************************************************************/
+    function generateSpeakerId() {
+      const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+      let suffix = "";
+      for (let i = 0; i < 6; i++) {
+        suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return "spk_" + suffix;
+    }
+
+    /**
+     * Builds the 73 session items and shuffles them such that
+     * the exact same phrase text NEVER appears twice in a row.
+     */
+    function buildSessionItems(speakerId) {
+      const pool = [];
+
+      // A) 20 commands x 3 takes = 60 clips
+      for (const cmd of COMMANDS_LIST) {
+        for (let take = 1; take <= 3; take++) {
+          let phraseText = cmd.text;
+          if (cmd.id === "c20" && take === 2) {
+            phraseText = "كنسل";
+          }
+          pool.push({
+            file: `${speakerId}_${cmd.id}_t${take}.wav`,
+            class_id: cmd.id,
+            label_ar: phraseText,
+            take: take,
+            duration: 2.0,
+            categoryLabel: `أمر صوتي (محاولة ${take} من 3)`
+          });
+        }
+      }
+
+      // B) 10 random "unknown" sentences
+      const shuffledUnk = [...UNKNOWN_SENTENCES].sort(() => Math.random() - 0.5);
+      const selectedUnk = shuffledUnk.slice(0, 10);
+      selectedUnk.forEach((sentence, idx) => {
+        const nn = String(idx + 1).padStart(2, "0");
+        pool.push({
+          file: `${speakerId}_unk_${nn}.wav`,
+          class_id: "unk",
+          label_ar: sentence,
+          take: null,
+          duration: 4.0,
+          categoryLabel: "جملة عامة (4 ثوانٍ)"
+        });
+      });
+
+      // C) 3 silence clips
+      for (let n = 1; n <= 3; n++) {
+        pool.push({
+          file: `${speakerId}_sil_${n}.wav`,
+          class_id: "sil",
+          label_ar: "اسكت ومتتكلمش لمدة ثانيتين",
+          take: null,
+          duration: 2.0,
+          categoryLabel: "صمت / ضوضاء الغرفة"
+        });
+      }
+
+      // Shuffle with constraint: no two consecutive items have the same label_ar
+      return shuffleWithoutAdjacentDuplicates(pool);
+    }
+
+    function shuffleWithoutAdjacentDuplicates(items) {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const arr = [...items];
+        // Fisher-Yates shuffle
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+
+        // Repair adjacent duplicates by swapping forward
+        let valid = true;
+        for (let i = 1; i < arr.length; i++) {
+          if (arr[i].label_ar === arr[i - 1].label_ar) {
+            let swapped = false;
+            for (let k = i + 1; k < arr.length; k++) {
+              if (arr[k].label_ar !== arr[i - 1].label_ar &&
+                  (k + 1 >= arr.length || arr[k + 1].label_ar !== arr[i].label_ar)) {
+                [arr[i], arr[k]] = [arr[k], arr[i]];
+                swapped = true;
+                break;
+              }
+            }
+            if (!swapped) {
+              valid = false;
+              break;
+            }
+          }
+        }
+        if (valid) return arr;
+      }
+      return items;
+    }
+
+    /**
+     * Resamples Float32 PCM audio from native browser sampleRate to 16000 Hz
+     * using OfflineAudioContext, calculates peak & RMS, and builds a strict
+     * 16-bit PCM mono RIFF/WAVE Blob without trimming or normalization.
+     */
+    async function encodeRawTo16kWav(float32Samples, nativeSampleRate, targetDurationSec) {
+      const targetRate = 16000;
+      const targetLength = Math.round(targetDurationSec * targetRate);
+
+      // Create source AudioBuffer at native sample rate
+      const offlineCtx = new OfflineAudioContext(1, targetLength, targetRate);
+      const srcBuffer = offlineCtx.createBuffer(1, float32Samples.length, nativeSampleRate);
+      srcBuffer.copyToChannel(float32Samples, 0);
+
+      const bufferSource = offlineCtx.createBufferSource();
+      bufferSource.buffer = srcBuffer;
+      bufferSource.connect(offlineCtx.destination);
+      bufferSource.start(0);
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const pcmFloat = renderedBuffer.getChannelData(0);
+
+      // Compute quality metrics on the 16kHz raw signal
+      let peak = 0;
+      let sumSquares = 0;
+      let clippedCount = 0;
+
+      for (let i = 0; i < pcmFloat.length; i++) {
+        const absVal = Math.abs(pcmFloat[i]);
+        if (absVal > peak) peak = absVal;
+        if (absVal >= 0.99) clippedCount++;
+        sumSquares += pcmFloat[i] * pcmFloat[i];
+      }
+
+      const rms = Math.sqrt(sumSquares / pcmFloat.length);
+      const clippedRatio = clippedCount / pcmFloat.length;
+      const actualDurationSec = Number((pcmFloat.length / targetRate).toFixed(3));
+
+      // Write RIFF/WAVE header + 16-bit little-endian PCM samples
+      const numSamples = pcmFloat.length;
+      const dataBytes = numSamples * 2;
+      const buffer = new ArrayBuffer(44 + dataBytes);
+      const view = new DataView(buffer);
+
+      function writeString(offset, str) {
+        for (let i = 0; i < str.length; i++) {
+          view.setUint8(offset + i, str.charCodeAt(i));
+        }
+      }
+
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + dataBytes, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);          // Subchunk1Size (16 for PCM)
+      view.setUint16(20, 1, true);           // AudioFormat (1 = PCM)
+      view.setUint16(22, 1, true);           // NumChannels (1 = Mono)
+      view.setUint32(24, targetRate, true);  // SampleRate (16000)
+      view.setUint32(28, targetRate * 2, true); // ByteRate (SampleRate * NumChannels * BitsPerSample/8)
+      view.setUint16(32, 2, true);           // BlockAlign (NumChannels * BitsPerSample/8)
+      view.setUint16(34, 16, true);          // BitsPerSample (16)
+      writeString(36, "data");
+      view.setUint32(40, dataBytes, true);
+
+      let offset = 44;
+      for (let i = 0; i < numSamples; i++) {
+        const s = Math.max(-1, Math.min(1, pcmFloat[i]));
+        const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+        view.setInt16(offset, int16, true);
+        offset += 2;
+      }
+
+      const wavBlob = new Blob([buffer], { type: "audio/wav" });
+
+      return {
+        blob: wavBlob,
+        peak: Number(peak.toFixed(5)),
+        rms: Number(rms.toFixed(5)),
+        clippedRatio,
+        duration_sec: actualDurationSec,
+        sample_rate: targetRate
+      };
+    }
+
+    /*************************************************************************
+     * 5. MICROPHONE & AUDIO ENGINE (iOS Safari Safe, Raw Unprocessed Audio)
+     *************************************************************************/
+    async function initMicrophone() {
+      const errBox = document.getElementById("mic-error-box");
+      errBox.classList.add("hidden");
+
+      try {
+        // Create/resume AudioContext directly inside user gesture handler (critical for iOS Safari)
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
+        }
+
+        if (!mediaStream) {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              channelCount: 1
+            },
+            video: false
+          });
+
+          sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+          // ScriptProcessorNode (4096 buffer) guarantees wide compatibility including older iOS Safari
+          processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+
+          processorNode.onaudioprocess = (event) => {
+            const inputData = event.inputBuffer.getChannelData(0);
+
+            // Live level meter update
+            let maxAmp = 0;
+            for (let i = 0; i < inputData.length; i++) {
+              const v = Math.abs(inputData[i]);
+              if (v > maxAmp) maxAmp = v;
+            }
+            const pct = Math.min(100, Math.round(maxAmp * 140));
+            const meterMain = document.getElementById("meter-fill");
+            const meterNoise = document.getElementById("noise-meter-fill");
+            if (meterMain) meterMain.style.width = pct + "%";
+            if (meterNoise) meterNoise.style.width = pct + "%";
+
+            // Capture raw samples if recording is active
+            if (isCapturing) {
+              const copy = new Float32Array(inputData.length);
+              copy.set(inputData);
+              capturedBuffers.push(copy);
+              captureCollectedSamples += copy.length;
+
+              if (captureCollectedSamples >= captureTargetSamples) {
+                isCapturing = false;
+                if (captureResolve) {
+                  const done = captureResolve;
+                  captureResolve = null;
+                  done();
+                }
+              }
+            }
+          };
+
+          // Connect source -> processor -> silent gain -> destination soonaudioprocess fires on all browsers
+          const silentGain = audioCtx.createGain();
+          silentGain.gain.value = 0;
+          sourceNode.connect(processorNode);
+          processorNode.connect(silentGain);
+          silentGain.connect(audioCtx.destination);
+        }
+
+        return true;
+      } catch (err) {
+        console.error("Microphone error:", err);
+        let msg = "تعذر الوصول إلى الميكروفون. يرجى السماح للمتصفح باستخدام الميكروفون من إعدادات الصفحة ثم المحاولة مرة أخرى.";
+        if (err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+          msg = "تم رفض إذن الميكروفون 🚫. من فضلك اضغط على أيقونة القفل بجانب رابط الموقع واسمح باستخدام الميكروفون.";
+        } else if (err && err.name === "NotFoundError") {
+          msg = "لم يتم العثور على ميكروفون متصل بهذا الجهاز.";
+        }
+        errBox.textContent = msg;
+        errBox.classList.remove("hidden");
+        return false;
+      }
+    }
+
+    /**
+     * Plays a crisp 0.3s beep using Web Audio Oscillator before recording starts.
+     */
+    function playStartBeep() {
+      return new Promise((resolve) => {
+        if (!audioCtx) return resolve();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+
+        gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.28);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+        setTimeout(resolve, 320);
+      });
+    }
+
+    /**
+     * Captures exact duration of raw audio samples and returns the 16kHz WAV result.
+     */
+    async function captureAudioClip(durationSec, onTick) {
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+
+      const nativeRate = audioCtx.sampleRate;
+      capturedBuffers = [];
+      captureCollectedSamples = 0;
+      // Record a tiny 0.1s safety margin then resample exact durationSec
+      captureTargetSamples = Math.ceil((durationSec + 0.1) * nativeRate);
+
+      const startTime = performance.now();
+      const timerInterval = setInterval(() => {
+        const elapsed = (performance.now() - startTime) / 1000;
+        const remaining = Math.max(0, durationSec - elapsed);
+        if (onTick) onTick(remaining);
+      }, 100);
+
+      isCapturing = true;
+      await new Promise((resolve) => {
+        captureResolve = resolve;
+      });
+      clearInterval(timerInterval);
+      if (onTick) onTick(0);
+
+      // Merge Float32 chunks into single contiguous buffer
+      const totalSamples = capturedBuffers.reduce((acc, b) => acc + b.length, 0);
+      const merged = new Float32Array(totalSamples);
+      let offset = 0;
+      for (const chunk of capturedBuffers) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      return await encodeRawTo16kWav(merged, nativeRate, durationSec);
+    }
+
+    function playWavBlob(blob) {
+      return new Promise((resolve) => {
+        if (currentPlaybackAudio) {
+          currentPlaybackAudio.pause();
+          currentPlaybackAudio = null;
+        }
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentPlaybackAudio = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audio.play().catch(() => resolve());
+      });
+    }
+
+    /*************************************************************************
+     * 6. BACKGROUND UPLOAD QUEUE & RETRY ENGINE
+     *************************************************************************/
+    async function enqueueUploadTask(task) {
+      await dbPut("queue", task);
+      await updateStatusCounters();
+      triggerUploadWorker();
+    }
+
+    async function updateStatusCounters() {
+      const allClips = await dbGetAll("clips");
+      const queueItems = await dbGetAll("queue");
+
+      const uploadedCount = allClips.filter((c) => c.uploaded).length;
+      const pendingCount = queueItems.length;
+
+      document.getElementById("status-uploaded").textContent = `تم الرفع ✓ ${uploadedCount}`;
+      document.getElementById("status-pending").textContent = `في الانتظار ⏳ ${pendingCount}`;
+
+      const netPill = document.getElementById("status-network");
+      if (navigator.onLine) {
+        netPill.classList.add("hidden");
+      } else {
+        netPill.classList.remove("hidden");
+      }
+
+      // Check if Finish Screen is waiting for queue to drain
+      if (!document.getElementById("screen-finish").classList.contains("hidden")) {
+        updateFinishScreenProgress(pendingCount);
+      }
+    }
+
+    function scheduleRetry() {
+      if (retryTimer) clearTimeout(retryTimer);
+      const delay = BACKOFF_DELAYS[Math.min(retryAttempt, BACKOFF_DELAYS.length - 1)];
+      retryAttempt++;
+      retryTimer = setTimeout(() => {
+        triggerUploadWorker();
+      }, delay);
+    }
+
+    async function triggerUploadWorker() {
+      if (isUploading) return;
+      if (!isSupabaseConfigured || !navigator.onLine) {
+        await updateStatusCounters();
+        return;
+      }
+
+      const queueItems = await dbGetAll("queue");
+      if (queueItems.length === 0) {
+        retryAttempt = 0;
+        await updateStatusCounters();
+        return;
+      }
+
+      // Sort FIFO by createdAt timestamp
+      queueItems.sort((a, b) => a.createdAt - b.createdAt);
+      const task = queueItems[0];
+
+      isUploading = true;
+      try {
+        if (task.type === "speaker") {
+          await uploadSpeakerRow(task.payload);
+        } else if (task.type === "clip") {
+          await uploadClipItem(task.file);
+        }
+
+        // Success -> remove from queue and reset backoff
+        await dbDelete("queue", task.id);
+        retryAttempt = 0;
+        isUploading = false;
+        await updateStatusCounters();
+
+        // Immediately process next item in queue
+        triggerUploadWorker();
+      } catch (err) {
+        console.warn("Upload task failed, will retry:", task.id, err);
+        isUploading = false;
+        await updateStatusCounters();
+        scheduleRetry();
+      }
+    }
+
+    async function uploadSpeakerRow(speakerPayload) {
+      const { error } = await supabaseClient
+        .from("speakers")
+        .insert([
+          {
+            speaker_id: speakerPayload.speaker_id,
+            gender: speakerPayload.gender,
+            age_range: speakerPayload.age_range,
+            region: speakerPayload.region,
+            device: speakerPayload.device,
+            consent: speakerPayload.consent,
+            user_agent: speakerPayload.user_agent
+          }
+        ]);
+
+      // Ignore duplicate primary key error (23505) if previous attempt already succeeded
+      if (error && error.code !== "23505" && !String(error.message).includes("duplicate")) {
+        throw error;
+      }
+    }
+
+    async function uploadClipItem(fileName) {
+      const clipRecord = await dbGet("clips", fileName);
+      if (!clipRecord) return; // Already cleaned up
+
+      const storagePath = `${clipRecord.speaker_id}/audio/${clipRecord.file}`;
+
+      // 1. Upload WAV to Supabase Storage (upsert: false, no chaining select)
+      const { error: storageError } = await supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, clipRecord.blob, {
+          contentType: "audio/wav",
+          upsert: false
+        });
+
+      if (storageError) {
+        const msg = String(storageError.message || "").toLowerCase();
+        const status = storageError.statusCode || storageError.status;
+        const isDuplicate =
+          status === 409 ||
+          status === "409" ||
+          msg.includes("already exists") ||
+          msg.includes("duplicate");
+
+        if (!isDuplicate) {
+          throw storageError;
+        }
+      }
+
+      // 2. Insert metadata row into public.recordings (no .select() chained)
+      const { error: dbError } = await supabaseClient
+        .from("recordings")
+        .insert([
+          {
+            file: clipRecord.file,
+            storage_path: storagePath,
+            speaker_id: clipRecord.speaker_id,
+            class_id: clipRecord.class_id,
+            label_ar: clipRecord.label_ar,
+            take: clipRecord.take,
+            duration_sec: clipRecord.duration_sec,
+            peak: clipRecord.peak,
+            rms: clipRecord.rms,
+            sample_rate: clipRecord.sample_rate,
+            timestamp_iso: clipRecord.timestamp_iso
+          }
+        ]);
+
+      if (dbError) {
+        const isDuplicateRow =
+          dbError.code === "23505" || String(dbError.message || "").includes("duplicate");
+        if (!isDuplicateRow) {
+          throw dbError;
+        }
+      }
+
+      // Mark clip as uploaded in local IndexedDB
+      clipRecord.uploaded = true;
+      await dbPut("clips", clipRecord);
+    }
+
+    window.addEventListener("online", () => {
+      updateStatusCounters();
+      triggerUploadWorker();
+    });
+    window.addEventListener("offline", () => {
+      updateStatusCounters();
+    });
+
+    /*************************************************************************
+     * 7. SCREEN 1: SPEAKER FORM LOGIC
+     *************************************************************************/
+    const speakerDisplay = document.getElementById("display-speaker-id");
+    const chkConsent = document.getElementById("chk-consent");
+    const btnStartSession = document.getElementById("btn-start-session");
+    const btnOpenNoise = document.getElementById("btn-open-noise");
+
+    speakerDisplay.textContent = state.speaker.speaker_id;
+
+    document.querySelectorAll(".option-grid").forEach((grid) => {
+      const field = grid.getAttribute("data-field");
+      grid.querySelectorAll(".radio-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          grid.querySelectorAll(".radio-btn").forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          state.speaker[field] = btn.getAttribute("data-value");
+          validateSpeakerForm();
+        });
+      });
+    });
+
+    chkConsent.addEventListener("change", () => {
+      state.speaker.consent = chkConsent.checked;
+      validateSpeakerForm();
+    });
+
+    function validateSpeakerForm() {
+      const valid =
+        Boolean(state.speaker.gender) &&
+        Boolean(state.speaker.age_range) &&
+        Boolean(state.speaker.region) &&
+        Boolean(state.speaker.device) &&
+        state.speaker.consent === true;
+
+      btnStartSession.disabled = !valid;
+      btnOpenNoise.disabled = !valid;
+    }
+
+    async function saveSpeakerAndPrepareSession() {
+      const micOk = await initMicrophone();
+      if (!micOk) return false;
+
+      if (state.items.length === 0) {
+        state.items = buildSessionItems(state.speaker.speaker_id);
+      }
+
+      await saveSessionState();
+
+      // Queue speaker row insertion (only once)
+      const existingSpeakerTask = await dbGet("queue", "speaker_" + state.speaker.speaker_id);
+      if (!existingSpeakerTask) {
+        await enqueueUploadTask({
+          id: "speaker_" + state.speaker.speaker_id,
+          type: "speaker",
+          payload: { ...state.speaker },
+          createdAt: Date.now()
+        });
+      }
+      return true;
+    }
+
+    btnStartSession.addEventListener("click", async () => {
+      const ok = await saveSpeakerAndPrepareSession();
+      if (!ok) return;
+      showScreen("screen-recording");
+      renderCurrentPrompt();
+    });
+
+    btnOpenNoise.addEventListener("click", async () => {
+      const ok = await saveSpeakerAndPrepareSession();
+      if (!ok) return;
+      showScreen("screen-noise");
+      renderNoiseList();
+    });
+
+    /*************************************************************************
+     * 8. SCREEN 2: RECORDING SESSION LOGIC
+     *************************************************************************/
+    function showScreen(screenId) {
+      ["screen-speaker", "screen-recording", "screen-noise", "screen-finish"].forEach((id) => {
+        document.getElementById(id).classList.add("hidden");
+      });
+      document.getElementById(screenId).classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    async function saveSessionState() {
+      await dbPut("session", {
+        key: "current",
+        speaker: state.speaker,
+        items: state.items,
+        currentIndex: state.currentIndex,
+        skippedIndices: state.skippedIndices,
+        noiseCount: state.noiseCount,
+        csvUploaded: state.csvUploaded
+      });
+    }
+
+    async function renderCurrentPrompt() {
+      if (state.currentIndex >= state.items.length) {
+        enterFinishScreen();
+        return;
+      }
+
+      pendingClip = null;
+      const item = state.items[state.currentIndex];
+      const total = state.items.length;
+      const currentNum = state.currentIndex + 1;
+
+      document.getElementById("rec-progress-text").textContent = `${currentNum} / ${total}`;
+      document.getElementById("rec-duration-badge").textContent = `المدة: ${item.duration} ثانية`;
+      document.getElementById("rec-progress-bar").style.width = `${Math.round((currentNum / total) * 100)}%`;
+
+      document.getElementById("phrase-category").textContent = item.categoryLabel;
+      document.getElementById("phrase-text").textContent = item.label_ar;
+      document.getElementById("phrase-hint").textContent =
+        item.class_id === "sil"
+          ? "اضغط تسجيل وحافظ على الهدوء التام لمدة ثانيتين"
+          : "اضغط «تسجيل»، انتظر الصافرة، ثم انطق الجملة بوضوح";
+
+      // Check if this prompt was already recorded earlier (e.g., user pressed "رجوع")
+      const existingClip = await dbGet("clips", item.file);
+      const qAlert = document.getElementById("quality-alert");
+      qAlert.classList.add("hidden");
+
+      if (existingClip) {
+        qAlert.className = "alert alert-success";
+        qAlert.textContent = "✓ تم تسجيل وحفظ هذا المقطع مسبقًا. يمكنك إعادة تسجيله أو الانتقال للتالي.";
+        qAlert.classList.remove("hidden");
+      }
+
+      // Reset UI controls to idle
+      document.getElementById("controls-idle").classList.remove("hidden");
+      document.getElementById("controls-recording").classList.add("hidden");
+      document.getElementById("controls-review").classList.add("hidden");
+      document.getElementById("meter-status-text").textContent = "جاهز";
+
+      document.getElementById("btn-prev").disabled = state.currentIndex === 0;
+    }
+
+    document.getElementById("btn-record").addEventListener("click", async () => {
+      const micOk = await initMicrophone();
+      if (!micOk) return;
+
+      const item = state.items[state.currentIndex];
+      const qAlert = document.getElementById("quality-alert");
+      qAlert.classList.add("hidden");
+
+      document.getElementById("controls-idle").classList.add("hidden");
+      document.getElementById("controls-review").classList.add("hidden");
+      document.getElementById("controls-recording").classList.remove("hidden");
+      document.getElementById("meter-status-text").textContent = "استعد...";
+
+      const countdownSpan = document.getElementById("rec-countdown");
+      countdownSpan.textContent = item.duration.toFixed(1);
+
+      // 0.3s start beep
+      await playStartBeep();
+
+      document.getElementById("meter-status-text").textContent = "جاري التسجيل 🔴";
+      const result = await captureAudioClip(item.duration, (rem) => {
+        countdownSpan.textContent = rem.toFixed(1);
+      });
+
+      document.getElementById("meter-status-text").textContent = "تم التسجيل";
+      document.getElementById("controls-recording").classList.add("hidden");
+      document.getElementById("controls-review").classList.remove("hidden");
+
+      pendingClip = {
+        file: item.file,
+        speaker_id: state.speaker.speaker_id,
+        class_id: item.class_id,
+        label_ar: item.label_ar,
+        take: item.take,
+        duration_sec: result.duration_sec,
+        peak: result.peak,
+        rms: result.rms,
+        sample_rate: result.sample_rate,
+        timestamp_iso: new Date().toISOString(),
+        blob: result.blob,
+        uploaded: false
+      };
+
+      // Quality checks (skip both checks for silence clips)
+      if (item.class_id !== "sil") {
+        if (result.peak < 0.05) {
+          qAlert.className = "alert alert-warning";
+          qAlert.textContent = "⚠️ الصوت واطي، قرّب من الموبايل وأعد التسجيل.";
+          qAlert.classList.remove("hidden");
+        } else if (result.clippedRatio > 0.01) {
+          qAlert.className = "alert alert-danger";
+          qAlert.textContent = "⚠️ الصوت عالي جدًا، ابعد شوية وأعد التسجيل.";
+          qAlert.classList.remove("hidden");
+        }
+      }
+
+      // Automatically play back the recorded clip
+      await playWavBlob(result.blob);
+    });
+
+    document.getElementById("btn-replay").addEventListener("click", () => {
+      if (pendingClip && pendingClip.blob) {
+        playWavBlob(pendingClip.blob);
+      }
+    });
+
+    document.getElementById("btn-rerecord").addEventListener("click", () => {
+      pendingClip = null;
+      document.getElementById("quality-alert").classList.add("hidden");
+      document.getElementById("controls-review").classList.add("hidden");
+      document.getElementById("controls-idle").classList.remove("hidden");
+      document.getElementById("meter-status-text").textContent = "جاهز";
+    });
+
+    // Only when user presses "تمام، التالي" is the clip saved to IndexedDB and queued for upload
+    document.getElementById("btn-accept").addEventListener("click", async () => {
+      if (!pendingClip) return;
+
+      await dbPut("clips", pendingClip);
+      await enqueueUploadTask({
+        id: "clip_" + pendingClip.file,
+        type: "clip",
+        file: pendingClip.file,
+        createdAt: Date.now()
+      });
+
+      // Remove from skipped list if previously skipped
+      state.skippedIndices = state.skippedIndices.filter((idx) => idx !== state.currentIndex);
+      state.currentIndex++;
+      await saveSessionState();
+      renderCurrentPrompt();
+    });
+
+    document.getElementById("btn-prev").addEventListener("click", async () => {
+      if (state.currentIndex > 0) {
+        state.currentIndex--;
+        await saveSessionState();
+        renderCurrentPrompt();
+      }
+    });
+
+    document.getElementById("btn-skip").addEventListener("click", async () => {
+      // Skipped clips are NOT saved or uploaded
+      if (!state.skippedIndices.includes(state.currentIndex)) {
+        state.skippedIndices.push(state.currentIndex);
+      }
+      state.currentIndex++;
+      await saveSessionState();
+      renderCurrentPrompt();
+    });
+
+    document.getElementById("btn-finish-early").addEventListener("click", () => {
+      enterFinishScreen();
+    });
+
+    /*************************************************************************
+     * 9. SCREEN 3: OPTIONAL BACKGROUND NOISE (60-SECOND CHUNKS)
+     *************************************************************************/
+    async function renderNoiseList() {
+      const allClips = await dbGetAll("clips");
+      const noiseClips = allClips.filter((c) => c.class_id === "noise");
+      const listEl = document.getElementById("noise-recorded-list");
+      listEl.innerHTML = "";
+
+      noiseClips.forEach((nc) => {
+        const div = document.createElement("div");
+        div.className = "noise-item";
+        div.innerHTML = `
+          <span>🔊 ${nc.file} (${nc.duration_sec} ث)</span>
+          <span>${nc.uploaded ? "تم الرفع ✓" : "في الانتظار ⏳"}</span>
+        `;
+        listEl.appendChild(div);
+      });
+    }
+
+    document.getElementById("btn-record-noise").addEventListener("click", async () => {
+      const micOk = await initMicrophone();
+      if (!micOk) return;
+
+      document.getElementById("noise-alert").classList.add("hidden");
+      document.getElementById("noise-controls-idle").classList.add("hidden");
+      document.getElementById("noise-controls-review").classList.add("hidden");
+      document.getElementById("noise-controls-recording").classList.remove("hidden");
+
+      const countdownEl = document.getElementById("noise-countdown");
+      countdownEl.textContent = "60";
+
+      await playStartBeep();
+
+      const result = await captureAudioClip(60.0, (rem) => {
+        countdownEl.textContent = Math.ceil(rem);
+      });
+
+      const nextIndex = state.noiseCount + 1;
+      const fileName = `${state.speaker.speaker_id}_noise_${nextIndex}.wav`;
+
+      pendingNoiseClip = {
+        file: fileName,
+        speaker_id: state.speaker.speaker_id,
+        class_id: "noise",
+        label_ar: "ضوضاء المحل",
+        take: null,
+        duration_sec: result.duration_sec,
+        peak: result.peak,
+        rms: result.rms,
+        sample_rate: result.sample_rate,
+        timestamp_iso: new Date().toISOString(),
+        blob: result.blob,
+        uploaded: false
+      };
+
+      document.getElementById("noise-controls-recording").classList.add("hidden");
+      document.getElementById("noise-controls-review").classList.remove("hidden");
+    });
+
+    document.getElementById("btn-accept-noise").addEventListener("click", async () => {
+      if (!pendingNoiseClip) return;
+      state.noiseCount++;
+      await dbPut("clips", pendingNoiseClip);
+      await enqueueUploadTask({
+        id: "clip_" + pendingNoiseClip.file,
+        type: "clip",
+        file: pendingNoiseClip.file,
+        createdAt: Date.now()
+      });
+      await saveSessionState();
+
+      pendingNoiseClip = null;
+      document.getElementById("noise-controls-review").classList.add("hidden");
+      document.getElementById("noise-controls-idle").classList.remove("hidden");
+
+      const alertEl = document.getElementById("noise-alert");
+      alertEl.className = "alert alert-success";
+      alertEl.textContent = "✓ تم حفظ مقطع الضوضاء وإضافته لقائمة الرفع.";
+      alertEl.classList.remove("hidden");
+
+      renderNoiseList();
+    });
+
+    document.getElementById("btn-discard-noise").addEventListener("click", () => {
+      pendingNoiseClip = null;
+      document.getElementById("noise-controls-review").classList.add("hidden");
+      document.getElementById("noise-controls-idle").classList.remove("hidden");
+    });
+
+    document.getElementById("btn-noise-to-session").addEventListener("click", () => {
+      showScreen("screen-recording");
+      renderCurrentPrompt();
+    });
+
+    document.getElementById("btn-noise-finish").addEventListener("click", () => {
+      enterFinishScreen();
+    });
+
+    /*************************************************************************
+     * 10. SCREEN 4: FINISH, METADATA.CSV GENERATION & ZIP BACKUP
+     *************************************************************************/
+    let finishCheckInterval = null;
+
+    async function enterFinishScreen() {
+      showScreen("screen-finish");
+      document.getElementById("finish-uploading-box").classList.remove("hidden");
+      document.getElementById("finish-done-box").classList.add("hidden");
+
+      triggerUploadWorker();
+
+      if (finishCheckInterval) clearInterval(finishCheckInterval);
+      finishCheckInterval = setInterval(async () => {
+        const queueItems = await dbGetAll("queue");
+        await updateFinishScreenProgress(queueItems.length);
+      }, 1000);
+
+      const queueItems = await dbGetAll("queue");
+      await updateFinishScreenProgress(queueItems.length);
+    }
+
+    async function updateFinishScreenProgress(pendingCount) {
+      const progressText = document.getElementById("finish-upload-progress");
+
+      if (pendingCount > 0) {
+        progressText.textContent = navigator.onLine
+          ? `جاري رفع ${pendingCount} ملفات... يرجى إبقاء الصفحة مفتوحة.`
+          : `⚠️ لا يوجد اتصال بالإنترنت. في انتظار عودة الاتصال لرفع ${pendingCount} ملفات...`;
+        return;
+      }
+
+      // Queue is empty -> generate & upload metadata.csv once
+      if (finishCheckInterval) {
+        clearInterval(finishCheckInterval);
+        finishCheckInterval = null;
+      }
+
+      progressText.textContent = "جاري إنشاء ورفع ملف البيانات metadata.csv...";
+
+      try {
+        await uploadMetadataCsvIfNeeded();
+        await showFinalSummary();
+      } catch (err) {
+        console.error("CSV upload failed:", err);
+        progressText.textContent = "⚠️ تعذر رفع metadata.csv، جاري إعادة المحاولة...";
+        setTimeout(() => enterFinishScreen(), 3000);
+      }
+    }
+
+    /**
+     * Generates UTF-8 with BOM CSV matching exact column specification:
+     * file, speaker_id, class_id, label_ar, take, gender, age_range, region, device, duration_sec, peak, rms, sample_rate, timestamp_iso
+     */
+    async function buildMetadataCsvString() {
+      const allClips = await dbGetAll("clips");
+      // Include every uploaded WAV (or all accepted clips if offline backup is used)
+      const uploadedClips = allClips.filter((c) => c.uploaded);
+      const rowsSource = uploadedClips.length > 0 ? uploadedClips : allClips;
+
+      // Sort deterministically by filename
+      rowsSource.sort((a, b) => a.file.localeCompare(b.file));
+
+      const headers = [
+        "file",
+        "speaker_id",
+        "class_id",
+        "label_ar",
+        "take",
+        "gender",
+        "age_range",
+        "region",
+        "device",
+        "duration_sec",
+        "peak",
+        "rms",
+        "sample_rate",
+        "timestamp_iso"
+      ];
+
+      function csvEscape(val) {
+        if (val === null || val === undefined) return "";
+        const str = String(val);
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      }
+
+      const lines = [headers.join(",")];
+      for (const clip of rowsSource) {
+        const row = [
+          clip.file,
+          clip.speaker_id,
+          clip.class_id,
+          clip.label_ar,
+          clip.take !== null && clip.take !== undefined ? clip.take : "",
+          state.speaker.gender,
+          state.speaker.age_range,
+          state.speaker.region,
+          state.speaker.device,
+          clip.duration_sec,
+          clip.peak,
+          clip.rms,
+          clip.sample_rate,
+          clip.timestamp_iso
+        ];
+        lines.push(row.map(csvEscape).join(","));
+      }
+
+      // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel renders Arabic properly
+      return "\uFEFF" + lines.join("\r\n");
+    }
+
+    async function uploadMetadataCsvIfNeeded() {
+      if (state.csvUploaded || !isSupabaseConfigured) return;
+
+      const csvContent = await buildMetadataCsvString();
+      const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+      const csvPath = `${state.speaker.speaker_id}/metadata.csv`;
+
+      const { error } = await supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .upload(csvPath, csvBlob, {
+          contentType: "text/csv",
+          upsert: false
+        });
+
+      if (error) {
+        const msg = String(error.message || "").toLowerCase();
+        const status = error.statusCode || error.status;
+        const isDuplicate =
+          status === 409 ||
+          status === "409" ||
+          msg.includes("already exists") ||
+          msg.includes("duplicate");
+
+        if (!isDuplicate) {
+          throw error;
+        }
+      }
+
+      state.csvUploaded = true;
+      await saveSessionState();
+    }
+
+    async function showFinalSummary() {
+      const allClips = await dbGetAll("clips");
+      const totalDuration = allClips.reduce((sum, c) => sum + (Number(c.duration_sec) || 0), 0);
+
+      document.getElementById("sum-recorded").textContent = allClips.length;
+      document.getElementById("sum-skipped").textContent = state.skippedIndices.length;
+      document.getElementById("sum-duration").textContent = `${Math.round(totalDuration)} ث`;
+
+      document.getElementById("finish-uploading-box").classList.add("hidden");
+      document.getElementById("finish-done-box").classList.remove("hidden");
+    }
+
+    // Download ZIP backup matching exact bucket structure: {speaker_id}/metadata.csv + {speaker_id}/audio/*.wav
+    document.getElementById("btn-download-zip").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-download-zip");
+      btn.disabled = true;
+      btn.textContent = "⏳ جاري تجهيز الملف المضغوط...";
+
+      try {
+        const zip = new JSZip();
+        const spkId = state.speaker.speaker_id;
+        const rootFolder = zip.folder(spkId);
+        const audioFolder = rootFolder.folder("audio");
+
+        const csvContent = await buildMetadataCsvString();
+        rootFolder.file("metadata.csv", csvContent);
+
+        const allClips = await dbGetAll("clips");
+        for (const clip of allClips) {
+          audioFolder.file(clip.file, clip.blob);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${spkId}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "📦 تحميل نسخة احتياطية (ZIP)";
+      }
+    });
+
+    // Clear local data and start a new speaker (only allowed when queue is empty)
+    document.getElementById("btn-new-speaker").addEventListener("click", async () => {
+      const queueItems = await dbGetAll("queue");
+      if (queueItems.length > 0) {
+        return;
+      }
+      await dbClearAll();
+      window.location.reload();
+    });
+
+    /*************************************************************************
+     * 11. INITIALIZATION & SESSION RECOVERY ON PAGE RELOAD
+     *************************************************************************/
+    (async function initApp() {
+      await openDatabase();
+      await updateStatusCounters();
+      triggerUploadWorker();
+
+      const savedSession = await dbGet("session", "current");
+      if (savedSession && savedSession.speaker && savedSession.items && savedSession.items.length > 0) {
+        const banner = document.getElementById("resume-banner");
+        const resumeText = document.getElementById("resume-text");
+        const allClips = await dbGetAll("clips");
+
+        resumeText.textContent = `توجد جلسة محفوظة للمتحدث (${savedSession.speaker.speaker_id}) — تم تسجيل ${allClips.length} مقطع حتى الآن.`;
+        banner.classList.remove("hidden");
+
+        document.getElementById("btn-resume-yes").addEventListener("click", async () => {
+          banner.classList.add("hidden");
+          state = {
+            speaker: savedSession.speaker,
+            items: savedSession.items,
+            currentIndex: savedSession.currentIndex || 0,
+            skippedIndices: savedSession.skippedIndices || [],
+            noiseCount: savedSession.noiseCount || 0,
+            csvUploaded: savedSession.csvUploaded || false
+          };
+
+          if (state.currentIndex >= state.items.length) {
+            enterFinishScreen();
+          } else {
+            showScreen("screen-recording");
+            renderCurrentPrompt();
+          }
+        });
+
+        document.getElementById("btn-resume-no").addEventListener("click", async () => {
+          await dbClearAll();
+          banner.classList.add("hidden");
+          await updateStatusCounters();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
