@@ -661,72 +661,68 @@
 
   <script>
     /*************************************************************************
-     * 0. SUPABASE CONFIGURATION (Fill in your project URL and Anon Key)
+     * 1. DATASET DEFINITIONS (Phrases from images + Numbers)
      *************************************************************************/
-    const SUPABASE_URL = "https://zgjqtmmjhycqwvaecxvy.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnanF0bW1qaHljcXd2YWVjeHZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTc0MTAsImV4cCI6MjExMTA5MzQxMH0.hphdp8Mm5yurd8tqsENz2jWkIJMjnLBlskjutBJAoBM";
-    const STORAGE_BUCKET = "kws-recordings";
+    const RECORDING_PHRASES = [
+      // الصورة 1
+      { id: "p01", text: "عيد آخر عملية" },
+      { id: "p02", text: "آخر عملية وصلت ؟" },
+      { id: "p03", text: "فيه عمليات فشلت انهارده؟" },
+      { id: "p04", text: "إجمالي النهارده كام؟" },
+      { id: "p05", text: "كام عملية النهارده؟" },
+      { id: "p06", text: "قارن النهارده بامبارح" },
+      { id: "p07", text: "أعلى عملية النهارده كانت كام؟" },
+      { id: "p08", text: "جالي كام على إنستاباي النهارده؟" },
+      { id: "p09", text: "الشهر ده جالي كام؟" },
+      { id: "p10", text: "صافي فلوسك كام؟" },
 
-    // Initialize Supabase client (anon key only)
-    const isSupabaseConfigured =
-      SUPABASE_URL !== "https://YOUR-PROJECT.supabase.co" &&
-      SUPABASE_ANON_KEY !== "YOUR-ANON-PUBLIC-KEY";
+      // الصورة 2
+      { id: "p11", text: "ليه الـQR مش شغال؟" },
+      { id: "p12", text: "فيه أي عمليات مالية محتاجة مراجعة؟" },
+      { id: "p13", text: "اقفل اليوم" },
+      { id: "p14", text: "وريني تقرير امبارح" },
+      { id: "p15", text: "العمليه لسه متعلقة؟" },
+      { id: "p16", text: "العمليه فشلت ؟" },
+      { id: "p17", text: "رقم العملية كام؟" },
+      { id: "p18", text: "الدفع كان بأنهي طريقة؟" },
 
-    const supabaseClient = isSupabaseConfigured
-      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-      : null;
+      // الصورة 3
+      { id: "p19", text: "ملخص الشهر ده" },
+      { id: "p20", text: "تارجيت انهارده كام ؟" },
+      { id: "p21", text: "فاضل كام وأوصل للتارجيت؟" },
+      { id: "p22", text: "البيع الشهر ده أحسن؟" },
+      { id: "p23", text: "إمتى كان أكتر وقت فيه زحمة؟" },
 
-    if (!isSupabaseConfigured) {
-      document.getElementById("config-warning").classList.remove("hidden");
-    }
+      // الصورة 4
+      { id: "p24", text: "السنة دي كسبت كام؟" },
+      { id: "p25", text: "إجمالي السنة اللي فاتت كام؟" },
+      { id: "p26", text: "الأسبوع ده جالي كام؟" },
+      { id: "p27", text: "الأسبوع اللي فات جالي كام؟" },
+      { id: "p28", text: "إجمالي آخر 3 أسابيع كام؟" },
+      { id: "p29", text: "جالي كام خلال آخر 6 شهور؟" },
+      { id: "p30", text: "جالي كام يوم الاتنين؟" },
 
-    /*************************************************************************
-     * 1. DATASET DEFINITIONS (Commands, Unknowns, Silence)
-     *************************************************************************/
-    const COMMANDS_LIST = [
-      { id: "c01", text: "إجمالي النهارده" },
-      { id: "c02", text: "عدد العمليات" },
-      { id: "c03", text: "آخر عملية" },
-      { id: "c04", text: "عيد تاني" },
-      { id: "c05", text: "عمليات فشلت" },
-      { id: "c06", text: "عمليات معلقة" },
-      { id: "c07", text: "أعلى عملية" },
-      { id: "c08", text: "إجمالي امبارح" },
-      { id: "c09", text: "إجمالي الأسبوع" },
-      { id: "c10", text: "إجمالي الشهر" },
-      { id: "c11", text: "الفلوس هتنزل امتى" },
-      { id: "c12", text: "رصيد حسابي" },
-      { id: "c13", text: "فاضل للتارجيت" },
-      { id: "c14", text: "مرتجع النهارده" },
-      { id: "c15", text: "الشبكة" },
-      { id: "c16", text: "البطارية" },
-      { id: "c17", text: "علّي الصوت" },
-      { id: "c18", text: "وطّي الصوت" },
-      { id: "c19", text: "أيوه" },
-      { id: "c20", text: "لأ" } // take 2 uses "كنسل"
-    ];
-
-    const UNKNOWN_SENTENCES = [
-      "وصلني 500 جنيه؟",
-      "قارن النهارده بامبارح",
-      "إجمالي آخر عشر أيام كام؟",
-      "أزوّد مبيعاتي إزاي؟",
-      "أقدر آخد قرض؟",
-      "وريني آخر 5 عمليات",
-      "الشهر اللي فات جالي كام؟",
-      "رقم العملية كام؟",
-      "الدفع كان بأنهي طريقة؟",
-      "ملخص الأسبوع ده",
-      "جالي كام في آخر ساعتين؟",
-      "إمتى كان أكتر وقت فيه زحمة؟",
-      "القسط الجاي إمتى؟",
-      "ليه الـQR مش شغال؟",
-      "الجو عامل إيه النهارده؟",
-      "الساعة كام دلوقتي؟",
-      "جالي كام يوم الاتنين؟",
-      "وريني تقرير امبارح",
-      "رقم المرتجع إيه؟",
-      "متوقع أبيع بكام الشهر ده؟"
+      // حبة أرقام
+      { id: "n01", text: "صفر" },
+      { id: "n02", text: "واحد" },
+      { id: "n03", text: "اتنين" },
+      { id: "n04", text: "تلاتة" },
+      { id: "n05", text: "أربعة" },
+      { id: "n06", text: "خمسة" },
+      { id: "n07", text: "ستة" },
+      { id: "n08", text: "سبعة" },
+      { id: "n09", text: "تمانية" },
+      { id: "n10", text: "تسعة" },
+      { id: "n11", text: "عشرة" },
+      { id: "n12", text: "عشرين" },
+      { id: "n13", text: "خمسين" },
+      { id: "n14", text: "مية" },
+      { id: "n15", text: "ميتين" },
+      { id: "n16", text: "خمسمية" },
+      { id: "n17", text: "ألف" },
+      { id: "n18", text: "ألفين" },
+      { id: "n19", text: "خمس تلاف" },
+      { id: "n20", text: "عشر تلاف" }
     ];
 
     /*************************************************************************
@@ -869,56 +865,21 @@
     }
 
     /**
-     * Builds the 73 session items and shuffles them such that
-     * the exact same phrase text NEVER appears twice in a row.
+     * Builds the session items from the 30 phrases + 20 numbers
+     * and shuffles them so no two consecutive items are identical.
      */
     function buildSessionItems(speakerId) {
-      const pool = [];
-
-      // A) 20 commands x 3 takes = 60 clips
-      for (const cmd of COMMANDS_LIST) {
-        for (let take = 1; take <= 3; take++) {
-          let phraseText = cmd.text;
-          if (cmd.id === "c20" && take === 2) {
-            phraseText = "كنسل";
-          }
-          pool.push({
-            file: `${speakerId}_${cmd.id}_t${take}.wav`,
-            class_id: cmd.id,
-            label_ar: phraseText,
-            take: take,
-            duration: 2.0,
-            categoryLabel: `أمر صوتي (محاولة ${take} من 3)`
-          });
-        }
-      }
-
-      // B) 10 random "unknown" sentences
-      const shuffledUnk = [...UNKNOWN_SENTENCES].sort(() => Math.random() - 0.5);
-      const selectedUnk = shuffledUnk.slice(0, 10);
-      selectedUnk.forEach((sentence, idx) => {
-        const nn = String(idx + 1).padStart(2, "0");
-        pool.push({
-          file: `${speakerId}_unk_${nn}.wav`,
-          class_id: "unk",
-          label_ar: sentence,
+      const pool = RECORDING_PHRASES.map((item) => {
+        const isNumber = item.id.startsWith("n");
+        return {
+          file: `${speakerId}_${item.id}.wav`,
+          class_id: item.id,
+          label_ar: item.text,
           take: null,
-          duration: 4.0,
-          categoryLabel: "جملة عامة (4 ثوانٍ)"
-        });
+          duration: isNumber ? 2.0 : 3.5,
+          categoryLabel: isNumber ? "رقم" : "جملة صوتية"
+        };
       });
-
-      // C) 3 silence clips
-      for (let n = 1; n <= 3; n++) {
-        pool.push({
-          file: `${speakerId}_sil_${n}.wav`,
-          class_id: "sil",
-          label_ar: "اسكت ومتتكلمش لمدة ثانيتين",
-          take: null,
-          duration: 2.0,
-          categoryLabel: "صمت / ضوضاء الغرفة"
-        });
-      }
 
       // Shuffle with constraint: no two consecutive items have the same label_ar
       return shuffleWithoutAdjacentDuplicates(pool);
